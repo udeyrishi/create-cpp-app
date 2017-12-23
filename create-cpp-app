@@ -22,10 +22,10 @@ set(CMAKE_C_FLAGS_RELEASE "${{CMAKE_C_FLAGS_RELEASE}} ${{BUILD_FLAGS}}")
 set(CMAKE_C_FLAGS_DEBUG "${{CMAKE_C_FLAGS_DEBUG}} ${{BUILD_FLAGS}}")
 
 # Output vars
-set(LIB_TARGET "${{PROJECT_NAME}}_lib")
+set(LIB_TARGET "${{PROJECT_NAME}}-lib")
 set(BIN_TARGET ${{PROJECT_NAME}})
 set(TEST_LIB "catch")
-set(TEST_TARGET "${{PROJECT_NAME}}_test")
+set(TEST_TARGET "${{PROJECT_NAME}}-test")
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${{CMAKE_BINARY_DIR}}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${{CMAKE_BINARY_DIR}}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${{CMAKE_BINARY_DIR}}/bin)
@@ -104,7 +104,7 @@ def main(debug, rebuild, test):
         .then('make')
 
     if test:
-        call.then(os.path.join(out, 'bin', '{{0}}_test'.format(PROJECT)))
+        call.then(os.path.join(out, 'bin', '{{0}}-test'.format(PROJECT)))
 
     return call.run()
 
@@ -161,7 +161,7 @@ MAIN_SRC_TEMPLATE = '''#include <demo.hpp>
 
 int main() {{
     auto result = {0}::sum(2, 2);
-    std::cout << "2 + 2 = " << result << std::endl;
+    std::cout << "2 + 2 = " << result << ". " << result << " - 1 = " << ({0}::sum(result, -1)) << ", quick maths" << std::endl;
     return 0;
 }}
 '''
@@ -210,6 +210,7 @@ script:
 import argparse
 import json
 import os
+import re
 import stat
 import shutil
 import sys
@@ -227,9 +228,35 @@ def download_catch_header(dest):
     with open(dest, 'wb') as f:
         f.write(catch_header)
 
+def cleanup_name(name):
+    name = re.sub(r'[^0-9a-zA-Z]+', '-', name)
+    return name
+
+def cpp_name(name):
+    clean_name = unicode(cleanup_name(name))
+    i = 0
+    while i < len(clean_name) and (clean_name[i].isnumeric() or clean_name[i] == '-'):
+        i += 1
+
+    capitalize = True
+    cpp_name = ''
+    while i < len(clean_name):
+        if clean_name[i] == '-':
+            capitalize = True
+            i += 1
+            continue
+        cpp_name += clean_name[i].upper() if capitalize else clean_name[i]
+        capitalize = clean_name[i].isnumeric()
+        i += 1
+
+    return cpp_name.encode('ascii', 'ignore')
+
 class Project:
     def __init__(self, name, dir, force):
-        self.__name = name
+        self.__name = cleanup_name(name)
+        self.__cpp_name = cpp_name(name)
+        if (self.__cpp_name == ''):
+            raise BadProjectError('\'{0}\' cannot be trivially converted to a valid C++ namespace.'.format(name))
         self.__project_path = os.path.abspath(os.path.expanduser(os.path.join(dir, name)))
         if os.path.isdir(self.__project_path):
             if force:
@@ -237,20 +264,17 @@ class Project:
             else:
                 raise BadProjectError('{0} directory already exists.'.format(self.__project_path))
 
-    def __cpp_name(self):
-        return self.__name.capitalize()
-
     def __create_inc(self):
         os.makedirs(os.path.join(self.__project_path, 'inc'))
         with open(os.path.join(self.__project_path, 'inc', 'demo.hpp'), 'w') as f:
-            f.write(DEMO_HEADER_TEMPLATE.format(self.__cpp_name()))
+            f.write(DEMO_HEADER_TEMPLATE.format(self.__cpp_name))
 
     def __create_src(self):
         os.makedirs(os.path.join(self.__project_path, 'src'))
         with open(os.path.join(self.__project_path, 'src', 'demo.cpp'), 'w') as f:
-            f.write(DEMO_SRC_TEMPLATE.format(self.__cpp_name()))
+            f.write(DEMO_SRC_TEMPLATE.format(self.__cpp_name))
         with open(os.path.join(self.__project_path, 'src', 'main.cpp'), 'w') as f:
-            f.write(MAIN_SRC_TEMPLATE.format(self.__cpp_name()))
+            f.write(MAIN_SRC_TEMPLATE.format(self.__cpp_name))
 
     def __create_tests(self):
         os.makedirs(os.path.join(self.__project_path, 'test', 'inc'))
@@ -258,7 +282,7 @@ class Project:
         with open(os.path.join(self.__project_path, 'test', 'runner.cpp'), 'w') as f:
             f.write(CATCH_RUNNER)
         with open(os.path.join(self.__project_path, 'test', 'demo_test.cpp'), 'w') as f:
-            f.write(SAMPLE_TEST_TEMPLATE.format(self.__cpp_name()))
+            f.write(SAMPLE_TEST_TEMPLATE.format(self.__cpp_name))
 
     def create(self):
         self.__create_inc()

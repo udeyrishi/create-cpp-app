@@ -139,37 +139,27 @@ TEST_CASE("sum works", "[sum]") {{
 DEMO_HEADER_TEMPLATE = '''#pragma once
 
 namespace {0} {{
+
 int sum(int x, int y);
 
-// For explicitly removing -Wunused-parameter
-template <typename T>
-void unused(const T &value) {{
-    (void)(value);
-}}
-
-template <typename T, typename... TArgs>
-void unused(const T &value, const TArgs&... args) {{
-    unused(value);
-    unused(args...);
-}}
 }}
 '''
 
 DEMO_SRC_TEMPLATE = '''#include <demo.hpp>
 
 namespace {0} {{
+
 int sum(int x, int y) {{
     return x + y;
 }}
+
 }}
 '''
 
 MAIN_SRC_TEMPLATE = '''#include <demo.hpp>
 #include <iostream>
 
-int main(const int argc, const char * const *argv) {{
-    {0}::unused(argc, argv);
-
+int main() {{
     auto result = {0}::sum(2, 2);
     std::cout << "2 + 2 = " << result << std::endl;
     return 0;
@@ -291,9 +281,9 @@ class Project:
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Creates a new C/C++ project following a good CMake template with Catch based testing enabled.')
+    parser = argparse.ArgumentParser(description='Creates a new CMake based C/C++ project with Catch testing enabled.')
     parser.add_argument('name', help='project\'s name')
-    parser.add_argument('dir', nargs='?', default=os.getcwd(), help='the parent directory for the project')
+    parser.add_argument('dir', nargs='?', default=os.getcwd(), help='the parent directory for the project. default = current working dir')
     parser.add_argument('-f', '--force', action='store_true', help='delete the project directory contents if it exists')
     args = parser.parse_args()
 

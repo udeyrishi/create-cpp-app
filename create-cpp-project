@@ -1,0 +1,258 @@
+#!/usr/bin/env python
+
+__metaclass__ = type
+
+CMAKE_LISTS_TEMPLATE = '''cmake_minimum_required(VERSION 3.2)
+set(PROJECT_NAME "{0}")
+project(${{PROJECT_NAME}})
+####################################################################################################
+####################################################################################################
+
+message(STATUS "Build type: ${{CMAKE_BUILD_TYPE}}")
+
+# Build flags
+set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_C_STANDARD 99)
+set(CMAKE_CXX_STANDARD_REQUIRED on)
+set(CMAKE_C_STANDARD_REQUIRED on)
+set(BUILD_FLAGS "-Wall -Wextra -Werror -Wsign-conversion -pedantic")
+set(CMAKE_CXX_FLAGS_RELEASE "${{CMAKE_C_FLAGS_RELEASE}} ${{BUILD_FLAGS}}")
+set(CMAKE_CXX_FLAGS_DEBUG "${{CMAKE_C_FLAGS_DEBUG}} ${{BUILD_FLAGS}}")
+set(CMAKE_C_FLAGS_RELEASE "${{CMAKE_C_FLAGS_RELEASE}} ${{BUILD_FLAGS}}")
+set(CMAKE_C_FLAGS_DEBUG "${{CMAKE_C_FLAGS_DEBUG}} ${{BUILD_FLAGS}}")
+
+# Output vars
+set(LIB_TARGET "${{PROJECT_NAME}}_lib")
+set(BIN_TARGET ${{PROJECT_NAME}})
+set(TEST_LIB "catch")
+set(TEST_TARGET "${{PROJECT_NAME}}_test")
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${{CMAKE_BINARY_DIR}}/lib)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${{CMAKE_BINARY_DIR}}/lib)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${{CMAKE_BINARY_DIR}}/bin)
+
+# Input vars
+set(SRC_DIR "${{CMAKE_SOURCE_DIR}}/src")
+set(INC_DIR "${{CMAKE_SOURCE_DIR}}/inc")
+set(TEST_DIR "${{CMAKE_SOURCE_DIR}}/test")
+set(TEST_INC "${{TEST_DIR}}/inc")
+set(MAIN "${{SRC_DIR}}/main.cpp")
+
+# The shareable core lib
+file(GLOB_RECURSE LIB_SOURCES ${{SRC_DIR}}/*.cpp ${{SRC_DIR}}/*.c)
+list(REMOVE_ITEM LIB_SOURCES ${{MAIN}})
+add_library(${{LIB_TARGET}} STATIC ${{LIB_SOURCES}})
+target_include_directories(${{LIB_TARGET}} PUBLIC ${{INC_DIR}})
+
+# The main executable
+add_executable(${{BIN_TARGET}} ${{MAIN}})
+target_link_libraries(${{BIN_TARGET}} ${{LIB_TARGET}})
+
+# The Catch testing library
+add_library(${{TEST_LIB}} INTERFACE)
+target_include_directories(${{TEST_LIB}} INTERFACE ${{TEST_INC}})
+
+# The test binary
+file(GLOB_RECURSE TEST_SOURCES ${{TEST_DIR}}/*.cpp ${{TEST_DIR}}/*.c)
+add_executable(${{TEST_TARGET}} ${{TEST_SOURCES}})
+target_link_libraries(${{TEST_TARGET}} ${{TEST_LIB}})
+target_link_libraries(${{TEST_TARGET}} ${{LIB_TARGET}})
+
+# Expose tests to CMake
+enable_testing()
+add_test(NAME ${{TEST_TARGET}} COMMAND ${{TEST_TARGET}})
+'''
+
+BUILD_SCRIPT_TEMPLATE = '''#!/usr/bin/env python
+
+__metaclass__ = type
+
+PROJECT = '{0}'
+
+class Runner:
+    def __init__(self, command=None):
+        self.__commands = []
+        if command != None:
+            self.then(command)
+
+    def then(self, command):
+        self.__commands.append(command)
+        return self
+
+    def run(self):
+        from subprocess import call
+        result = True
+        for c in self.__commands:
+            result &= c() if callable(c) else (call(c.strip().split()) == 0)
+            if not result:
+                break
+        return result
+
+
+def main(debug, rebuild, test):
+    import os
+    project_root = os.path.dirname(os.path.realpath(__file__))
+    flavour = 'debug' if debug else 'release'
+    out = os.path.join(project_root, 'out', flavour)
+
+    call = Runner()
+    if rebuild:
+        call.then('rm -rf {{0}}'.format(out))
+    call                                                                                \
+        .then('mkdir -p {{0}}'.format(out))                                               \
+        .then(lambda: os.chdir(out) == None)                                            \
+        .then('cmake -DCMAKE_BUILD_TYPE={{0}} {{1}}'.format(flavour, project_root))         \
+        .then('make')
+
+    if test:
+        call.then(os.path.join(out, 'bin', '{{0}}_test'.format(PROJECT)))
+
+    return call.run()
+
+
+if __name__ == '__main__':
+    import argparse
+    import sys
+    parser = argparse.ArgumentParser(description='builds the project')
+    parser.add_argument('-d', '--debug', action='store_true', help='build the debug flavour instead of release')
+    parser.add_argument('-r', '--rebuild', action='store_true', help='clean the flavour\\'s temporary files and the build artifacts before building')
+    parser.add_argument('-t', '--test', action='store_true', help='perform the tests after building the specified flavour')
+    args = parser.parse_args()
+    sys.exit(0 if main(debug=args.debug, rebuild=args.rebuild, test=args.test) else -1)
+'''
+
+CATCH_RUNNER = '''// This file is needed by the Catch testing library to configure the test runner.
+// Don't add new tests here.
+#define CATCH_CONFIG_MAIN
+#include <catch.hpp>
+'''
+
+SAMPLE_TEST_TEMPLATE = '''#include <catch.hpp>
+#include <demo.hpp>
+
+TEST_CASE("sum works", "[sum]") {{
+    REQUIRE({0}::sum(3, 3) == 6);
+    REQUIRE({0}::sum(3, -1) == 2);
+    REQUIRE({0}::sum(3, 0) == 3);
+}}
+'''
+
+DEMO_HEADER_TEMPLATE = '''#pragma once
+
+namespace {0} {{
+int sum(int x, int y);
+
+// For explicitly removing -Wunused-parameter
+template <typename T>
+void unused(const T &value) {{
+    (void)(value);
+}}
+
+template <typename T, typename... TArgs>
+void unused(const T &value, const TArgs&... args) {{
+    unused(value);
+    unused(args...);
+}}
+}}
+'''
+
+DEMO_SRC_TEMPLATE = '''#include <demo.hpp>
+
+namespace {0} {{
+int sum(int x, int y) {{
+    return x + y;
+}}
+}}
+'''
+
+MAIN_SRC_TEMPLATE = '''#include <demo.hpp>
+#include <iostream>
+
+int main(const int argc, const char * const *argv) {{
+    {0}::unused(argc, argv);
+
+    auto result = {0}::sum(2, 2);
+    std::cout << "2 + 2 = " << result << std::endl;
+    return 0;
+}}
+'''
+
+import argparse
+import json
+import os
+import stat
+import shutil
+import sys
+from urllib2 import urlopen
+
+
+class BadProjectError(Exception):
+    pass
+
+def download_catch_header(dest):
+    url = 'https://api.github.com/repos/catchorg/Catch2/releases/latest'
+    latest_release = json.loads(urlopen(url).read())
+    download_url = [asset for asset in latest_release['assets'] if asset['name'] == 'catch.hpp'][0]['browser_download_url']
+    catch_header = urlopen(download_url).read()
+    with open(dest, 'wb') as f:
+        f.write(catch_header)
+
+class Project:
+    def __init__(self, name, dir, force):
+        self.__name = name
+        self.__project_path = os.path.abspath(os.path.expanduser(os.path.join(dir, name)))
+        if os.path.isdir(self.__project_path):
+            if force:
+                shutil.rmtree(self.__project_path)
+            else:
+                raise BadProjectError('{0} directory already exists.'.format(self.__project_path))
+
+    def __cpp_name(self):
+        return self.__name.capitalize()
+
+    def __create_inc(self):
+        os.makedirs(os.path.join(self.__project_path, 'inc'))
+        with open(os.path.join(self.__project_path, 'inc', 'demo.hpp'), 'w') as f:
+            f.write(DEMO_HEADER_TEMPLATE.format(self.__cpp_name()))
+
+    def __create_src(self):
+        os.makedirs(os.path.join(self.__project_path, 'src'))
+        with open(os.path.join(self.__project_path, 'src', 'demo.cpp'), 'w') as f:
+            f.write(DEMO_SRC_TEMPLATE.format(self.__cpp_name()))
+        with open(os.path.join(self.__project_path, 'src', 'main.cpp'), 'w') as f:
+            f.write(MAIN_SRC_TEMPLATE.format(self.__cpp_name()))
+
+    def __create_tests(self):
+        os.makedirs(os.path.join(self.__project_path, 'test', 'inc'))
+        download_catch_header(os.path.join(self.__project_path, 'test', 'inc', 'catch.hpp'))
+        with open(os.path.join(self.__project_path, 'test', 'runner.cpp'), 'w') as f:
+            f.write(CATCH_RUNNER)
+        with open(os.path.join(self.__project_path, 'test', 'demo_test.cpp'), 'w') as f:
+            f.write(SAMPLE_TEST_TEMPLATE.format(self.__cpp_name()))
+
+    def create(self):
+        self.__create_inc()
+        self.__create_src()
+        self.__create_tests()
+
+        build_script_path = os.path.join(self.__project_path, 'build')
+        with open(build_script_path, 'w') as f:
+            f.write(BUILD_SCRIPT_TEMPLATE.format(self.__name))
+        os.chmod(build_script_path, os.stat(build_script_path).st_mode | stat.S_IEXEC)
+
+        with open(os.path.join(self.__project_path, 'CMakeLists.txt'), 'w') as f:
+            f.write(CMAKE_LISTS_TEMPLATE.format(self.__name))
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Creates a new C/C++ project following a good CMake template with Catch based testing enabled.')
+    parser.add_argument('name', help='project\'s name')
+    parser.add_argument('dir', nargs='?', default=os.getcwd(), help='the parent directory for the project')
+    parser.add_argument('-f', '--force', action='store_true', help='delete the project directory contents if it exists')
+    args = parser.parse_args()
+
+    try:
+        Project(name=args.name, dir=args.dir, force=args.force).create()
+        sys.exit(0)
+    except BadProjectError as e:
+        print(e)
+        sys.exit(-1)

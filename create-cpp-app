@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+# Copyright (c) 2017 Udey Rishi. All rights reserved.
+
 __metaclass__ = type
 
 CMAKE_LISTS_TEMPLATE = '''cmake_minimum_required(VERSION 3.2)

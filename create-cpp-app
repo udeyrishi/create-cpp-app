@@ -259,7 +259,8 @@ def cpp_name(name):
 
 class Project:
     def __init__(self, name, dir, force):
-        self.__name = cleanup_name(name)
+        self.__name = name
+        self.__cleaned_name = cleanup_name(name)
         self.__cpp_name = cpp_name(name)
         if (self.__cpp_name == ''):
             raise BadProjectError('\'{0}\' cannot be trivially converted to a valid C++ namespace.'.format(name))
@@ -297,17 +298,20 @@ class Project:
 
         build_script_path = os.path.join(self.__project_path, 'build')
         with open(build_script_path, 'w') as f:
-            f.write(BUILD_SCRIPT_TEMPLATE.format(self.__name))
+            f.write(BUILD_SCRIPT_TEMPLATE.format(self.__cleaned_name))
         os.chmod(build_script_path, os.stat(build_script_path).st_mode | stat.S_IEXEC)
 
         with open(os.path.join(self.__project_path, 'CMakeLists.txt'), 'w') as f:
-            f.write(CMAKE_LISTS_TEMPLATE.format(self.__name))
+            f.write(CMAKE_LISTS_TEMPLATE.format(self.__cleaned_name))
 
         with open(os.path.join(self.__project_path, '.gitignore'), 'w') as f:
             f.write(GITIGNORE)
 
         with open(os.path.join(self.__project_path, '.travis.yml'), 'w') as f:
             f.write(TRAVIS)
+
+        with open(os.path.join(self.__project_path, 'README.md'), 'w') as f:
+            f.write('# {0}'.format(self.__name))
 
 
 if __name__ == '__main__':

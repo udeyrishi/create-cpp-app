@@ -206,7 +206,7 @@ matrix:
         - MATRIX_EVAL="CC=clang && CXX=clang++"
 
 before_install:
-    - eval "${{MATRIX_EVAL}}"
+    - eval "${MATRIX_EVAL}"
 
 script:
     - ./build -dt

@@ -85,7 +85,12 @@ class Runner:
         from subprocess import call
         result = True
         for c in self.__commands:
-            result &= c() if callable(c) else (call(c.strip().split()) == 0)
+            try:
+                result &= c() if callable(c) else (call(c.strip().split()) == 0)
+            except KeyboardInterrupt:
+                # passed onto child automatically
+                return False
+
             if not result:
                 break
         return result

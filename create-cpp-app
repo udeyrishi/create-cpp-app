@@ -91,7 +91,7 @@ class Runner:
         return result
 
 
-def main(debug, clean, test, run):
+def main(debug, clean, test, run, run_args):
     import os
     project_root = os.path.dirname(os.path.realpath(__file__))
     flavour = 'debug' if debug else 'release'
@@ -100,17 +100,17 @@ def main(debug, clean, test, run):
     call = Runner()
     if clean:
         call.then('rm -rf {{0}}'.format(out))
-    call                                                                                \\
-        .then('mkdir -p {{0}}'.format(out))                                               \\
-        .then(lambda: os.chdir(out) == None)                                            \\
-        .then('cmake -DCMAKE_BUILD_TYPE={{0}} {{1}}'.format(flavour, project_root))         \\
+    call                                                                                   \\
+        .then('mkdir -p {{0}}'.format(out))                                                \\
+        .then(lambda: os.chdir(out) == None)                                               \\
+        .then('cmake -DCMAKE_BUILD_TYPE={{0}} {{1}}'.format(flavour, project_root))        \\
         .then('make')
 
     if test:
         call.then(os.path.join(out, 'bin', '{{0}}-test'.format(PROJECT)))
 
     if run:
-        call.then(os.path.join(out, 'bin', '{{0}}'.format(PROJECT)))
+        call.then(os.path.join(out, 'bin', '{{0}}'.format(PROJECT)) + ' ' + ' '.join(run_args))
 
     return call.run()
 
@@ -123,8 +123,9 @@ if __name__ == '__main__':
     parser.add_argument('-c', '--clean', action='store_true', help='clean the flavour\\'s temporary files and the build artifacts before building')
     parser.add_argument('-t', '--test', action='store_true', help='perform the tests after building the specified flavour')
     parser.add_argument('-r', '--run', action='store_true', help='run the specified flavour after doing everything else')
+    parser.add_argument('run_args', nargs='*', help='params to pass through to the program, if -r is used')
     args = parser.parse_args()
-    sys.exit(0 if main(debug=args.debug, clean=args.clean, test=args.test, run=args.run) else -1)
+    sys.exit(0 if main(debug=args.debug, clean=args.clean, test=args.test, run=args.run, run_args=args.run_args) else -1)
 '''
 
 CATCH_RUNNER = '''// This file is needed by the Catch testing library to configure the test runner.
